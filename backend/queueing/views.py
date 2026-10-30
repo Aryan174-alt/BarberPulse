@@ -87,7 +87,8 @@ class WalkInThrottle(ScopedRateThrottle):
 
 class WalkInView(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [WalkInThrottle]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'walk_in' 
 
     def post(self, request, shop_id):
         input_serializer = WalkInInputSerializer(data=request.data)

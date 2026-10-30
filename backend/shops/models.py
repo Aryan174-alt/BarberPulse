@@ -12,8 +12,10 @@ class Shop(models.Model):
     )
     name = models.CharField(max_length=120)
     address = models.CharField(max_length=255)
+    phone = models.CharField(max_length=30, blank=True, default='')
     lat = models.DecimalField(max_digits=9, decimal_places=6)
     lon = models.DecimalField(max_digits=9, decimal_places=6)
+    photo = models.FileField(upload_to='shop_photos/', blank=True)
     opens_at = models.TimeField()
     closes_at = models.TimeField()
     break_start = models.TimeField(null=True, blank=True)
@@ -23,6 +25,9 @@ class Shop(models.Model):
 
     class Meta:
         ordering = ['name']
+        indexes = [
+            models.Index(fields=['is_closed_override', 'last_updated_at'], name='shop_status_updated_idx'),
+        ]
 
     def __str__(self):
         return self.name

@@ -22,6 +22,8 @@ services:
     environment:
       DB_HOST: db
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
+    volumes:
+      - shop_media:/app/media
     command: sh -c "python manage.py migrate && python manage.py seed_shops && daphne -b 0.0.0.0 -p 8000 config.asgi:application"
     ports:
       - "8000:8000"
@@ -48,3 +50,4 @@ services:
 
 volumes:
   postgres_data:
+  shop_media:

@@ -11,11 +11,13 @@
 - [x] 6. Docker Compose, tests, load-test scenario, deployment notes.
 - [x] 7. Rule-based assistant and labeled parser evaluation.
 - [x] 8. Architecture and interview documentation.
+- [x] 9. Refinement & Hardening: Composite indexes, walk-in rate throttling fix, 5-min grace countdown, counter QR display, audio turn alerts, 28/28 automated test suite.
 
 ## Validation
 
-- Backend unit/API/concurrency tests: 21 passed against PostgreSQL.
-- Frontend production build: passed.
-- Django system check: passed.
-- Assistant parser evaluation: 50/50 exact messages and 200/200 labeled fields.
+- Backend unit/API/concurrency/DB integrity tests: 28 passed against PostgreSQL.
+- Database constraints: Conditional active unique constraint, check constraint, and composite indexes verified.
+- Frontend production build: Vite production build passed cleanly.
+- Django system check: passed (0 issues).
+- Assistant parser evaluation: 50/50 exact messages and 200/200 labeled fields (100% accuracy).
 - Locust: 100 users, 657 nearby requests, 0 failures; mean 2,051 ms on local Docker.

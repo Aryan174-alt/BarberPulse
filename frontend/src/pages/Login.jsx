@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { authApi, saveTokens } from '../api/api.js'
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [register, setRegister] = useState(false)
   const [form, setForm] = useState({ username: '', password: '', role: 'customer', phone: '' })
   const [error, setError] = useState('')
@@ -24,7 +25,11 @@ export default function Login() {
         : await authApi.login({ username: form.username, password: form.password })
       const role = data.user?.role || form.role
       saveTokens(data, role)
-      navigate(role === 'owner' ? '/owner' : '/queue')
+      const requestedPath = new URLSearchParams(location.search).get('next')
+      const safeNextPath = requestedPath?.startsWith('/') && !requestedPath.startsWith('//')
+        ? requestedPath
+        : null
+      navigate(role === 'owner' ? '/owner' : safeNextPath || '/queue')
     } catch (requestError) {
       const detail = requestError.response?.data
       setError(typeof detail === 'string' ? detail : JSON.stringify(detail || 'Could not sign in.'))
@@ -48,13 +53,6 @@ export default function Login() {
         {register && (
           <>
             <label className="block text-sm font-medium text-slate-700">
-              Account type
-              <select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="role" value={form.role} onChange={update}>
-                <option value="customer">Customer</option>
-                <option value="owner">Shop owner</option>
-              </select>
-            </label>
-            <label className="block text-sm font-medium text-slate-700">
               Phone (optional)
               <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="phone" value={form.phone} onChange={update} />
             </label>
@@ -68,6 +66,9 @@ export default function Login() {
       <button className="mt-4 text-sm font-medium text-blue-700" onClick={() => setRegister(!register)}>
         {register ? 'Already have an account? Sign in' : 'Create a customer or owner account'}
       </button>
+      <p className="mt-4 text-sm text-slate-600">
+        Own a barber shop? <Link className="font-medium text-blue-700" to="/owner/register">Register your shop</Link>
+      </p>
     </section>
   )
 }

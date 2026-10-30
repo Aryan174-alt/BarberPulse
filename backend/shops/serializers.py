@@ -18,6 +18,7 @@ class BarberSerializer(serializers.ModelSerializer):
 
 class ShopSerializer(serializers.ModelSerializer):
     services = ServiceSerializer(many=True, read_only=True)
+    photo_url = serializers.SerializerMethodField()
     is_open = serializers.SerializerMethodField()
     queue_length = serializers.SerializerMethodField()
     estimated_wait_min = serializers.SerializerMethodField()
@@ -28,8 +29,14 @@ class ShopSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'name', 'address', 'lat', 'lon', 'opens_at', 'closes_at',
             'is_open', 'queue_length', 'estimated_wait_min', 'last_updated_at',
-            'services', 'distance_km',
+            'services', 'distance_km', 'phone', 'photo_url',
         )
+
+    def get_photo_url(self, shop):
+        if not shop.photo:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(shop.photo.url) if request else shop.photo.url
 
     def get_is_open(self, shop):
         return is_open(shop)

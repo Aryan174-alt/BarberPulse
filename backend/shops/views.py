@@ -55,7 +55,11 @@ class NearbyShopsView(APIView):
             ))
         else:
             return Response({'detail': 'sort must be distance or wait.'}, status=400)
-        serializer = ShopSerializer(shops, many=True, context={'distances': distances})
+        serializer = ShopSerializer(
+            shops,
+            many=True,
+            context={'distances': distances, 'request': request},
+        )
         return Response(serializer.data)
 
 
@@ -89,7 +93,7 @@ class ShopSearchView(APIView):
             if wait_limit < 0:
                 return Response({'detail': 'within_minutes cannot be negative.'}, status=400)
         shops = find_matching_shops(service_name, price_limit, wait_limit)
-        results = ShopSerializer(shops, many=True).data
+        results = ShopSerializer(shops, many=True, context={'request': request}).data
         if request.query_params.get('sort') == 'wait':
             results = sorted(results, key=lambda shop: shop['estimated_wait_min'])
         return Response(results)

@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -14,6 +15,7 @@ from queueing.services import release_no_shows
 
 class QueueApiTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.shop = Shop.objects.create(
             name='Test shop', address='Jaipur', lat=26.9, lon=75.8,
             opens_at='00:00', closes_at='23:59',

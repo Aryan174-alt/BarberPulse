@@ -32,6 +32,7 @@ client.interceptors.response.use(
 
 export const authApi = {
   register: (payload) => client.post('/auth/register/', payload),
+  registerOwnerShop: (payload) => client.post('/auth/register/owner/', payload),
   login: (payload) => client.post('/auth/login/', payload),
 }
 

@@ -6,7 +6,7 @@ const jaipur = [26.9124, 75.7873]
 
 export default function ShopMap({ shops, location = jaipur }) {
   return (
-    <MapContainer center={location} zoom={12} scrollWheelZoom={false} className="h-[24rem] w-full rounded-xl">
+    <MapContainer center={location} zoom={12} scrollWheelZoom={false} className="h-[20rem] w-full rounded-2xl sm:h-[24rem]">
       <MapCenter center={location} />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

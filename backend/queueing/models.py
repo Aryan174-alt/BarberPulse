@@ -50,6 +50,7 @@ class QueueEntry(models.Model):
         ]
         indexes = [
             models.Index(fields=['shop', 'status', 'joined_at']),
+            models.Index(fields=['customer', 'status'], name='queue_cust_stat_idx'),
         ]
 
     def __str__(self):

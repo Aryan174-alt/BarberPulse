@@ -52,7 +52,7 @@ class AssistantChatView(APIView):
             filters['within_minutes'],
         )
 
-        serialized = ShopSerializer(shops, many=True).data
+        serialized = ShopSerializer(shops, many=True, context={'request': request}).data
         if location:
             for item in serialized:
                 item['_distance_km'] = haversine_km(
