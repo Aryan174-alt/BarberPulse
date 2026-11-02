@@ -1,394 +1,328 @@
-import { useCallback, useEffect, useState } from 'react'
-
+import { useEffect, useState, useCallback } from 'react'
 import { queueApi, shopsApi } from '../api/api.js'
 
-function generateSimpleQRDataURL(url) {
-  // Generate an embeddable Google Charts QR code or inline SVG for instant crisp display
-  return `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=${encodeURIComponent(url)}`
-}
-
-function GracePeriodTimer({ calledAt }) {
-  const [secondsLeft, setSecondsLeft] = useState(0)
-
-  useEffect(() => {
-    function calculate() {
-      if (!calledAt) return
-      const elapsed = Math.floor((Date.now() - new Date(calledAt).getTime()) / 1000)
-      const remaining = Math.max(0, 300 - elapsed)
-      setSecondsLeft(remaining)
-    }
-    calculate()
-    const timer = setInterval(calculate, 1000)
-    return () => clearInterval(timer)
-  }, [calledAt])
-
-  const mins = Math.floor(secondsLeft / 60)
-  const secs = secondsLeft % 60
-  const isExpiring = secondsLeft < 60
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${
-        secondsLeft === 0
-          ? 'bg-rose-100 text-rose-800'
-          : isExpiring
-          ? 'bg-amber-100 text-amber-900 animate-pulse'
-          : 'bg-emerald-50 text-emerald-800'
-      }`}
-    >
-      <span className="size-1.5 rounded-full bg-current" />
-      {secondsLeft === 0
-        ? 'Grace period expired'
-        : `Auto no-show: ${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`}
-    </span>
-  )
-}
-
-export default function OwnerDashboard() {
+export default function AtelierDashboard() {
   const [shop, setShop] = useState(null)
-  const [shopDetails, setShopDetails] = useState(null)
-  const [entries, setEntries] = useState([])
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  const [showQRModal, setShowQRModal] = useState(false)
-  const [copiedLink, setCopiedLink] = useState(false)
+  const [queue, setQueue] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [actionBusy, setActionBusy] = useState(false)
+  const [walkinForm, setWalkinForm] = useState({ customer_name: '', customer_phone: '', service_id: '' })
 
-  // Quick Walk-In Form State
-  const [walkInName, setWalkInName] = useState('')
-  const [walkInServiceId, setWalkInServiceId] = useState('')
-  const [addingWalkIn, setAddingWalkIn] = useState(false)
-
-  const refresh = useCallback(async () => {
+  const loadDashboard = useCallback(async () => {
     try {
-      const [shopResponse, queueResponse] = await Promise.all([
-        queueApi.ownerShop(),
-        queueApi.ownerQueue(),
-      ])
-      setShop(shopResponse.data)
-      setEntries(queueResponse.data)
-      setError('')
-
-      if (shopResponse.data?.id && !shopDetails) {
-        const { data } = await shopsApi.detail(shopResponse.data.id)
-        setShopDetails(data)
-        if (data.services?.length > 0 && !walkInServiceId) {
-          setWalkInServiceId(String(data.services[0].id))
-        }
-      }
-    } catch (requestError) {
-      setError(requestError.response?.data?.detail || 'Sign in with an owner account linked to a shop.')
+      const shopRes = await queueApi.ownerShop()
+      setShop(shopRes.data)
+      const queueRes = await queueApi.ownerQueue()
+      setQueue(Array.isArray(queueRes.data) ? queueRes.data : queueRes.data?.results || [])
+    } catch {
+      // Ignored
+    } finally {
+      setLoading(false)
     }
-  }, [shopDetails, walkInServiceId])
+  }, [])
 
   useEffect(() => {
-    refresh()
-    const timer = window.setInterval(refresh, 8000)
-    return () => window.clearInterval(timer)
-  }, [refresh])
+    loadDashboard()
+    const timer = setInterval(loadDashboard, 6000)
+    return () => clearInterval(timer)
+  }, [loadDashboard])
 
-  async function act(id, action) {
-    try {
-      await queueApi.ownerAction(id, action)
-      setSuccess(`Action '${action}' completed.`)
-      setTimeout(() => setSuccess(''), 3000)
-      await refresh()
-    } catch (requestError) {
-      setError(requestError.response?.data?.detail || `Could not ${action} this queue entry.`)
-    }
-  }
-
-  async function toggleShop() {
+  async function handleToggleStatus() {
     if (!shop) return
+    setActionBusy(true)
     try {
-      await queueApi.updateOwnerShop({ is_closed_override: shop.is_open })
-      await refresh()
-    } catch (requestError) {
-      setError(requestError.response?.data?.detail || 'Could not update shop status.')
-    }
-  }
-
-  async function handleAddWalkIn(e) {
-    e.preventDefault()
-    if (!walkInName.trim() || !shop) return
-    setAddingWalkIn(true)
-    setError('')
-    try {
-      await shopsApi.walkIn(shop.id, {
-        name: walkInName.trim(),
-        service_id: walkInServiceId ? Number(walkInServiceId) : undefined,
-      })
-      setWalkInName('')
-      setSuccess(`Added walk-in: ${walkInName.trim()}`)
-      setTimeout(() => setSuccess(''), 3000)
-      await refresh()
+      await queueApi.updateOwnerShop({ is_open: !shop.is_open })
+      loadDashboard()
     } catch (err) {
-      setError(err.response?.data?.name?.[0] || err.response?.data?.detail || 'Could not add walk-in.')
+      alert(err.response?.data?.detail || 'Failed to toggle status.')
     } finally {
-      setAddingWalkIn(false)
+      setActionBusy(false)
     }
   }
 
-  const joinUrl = shop ? `${window.location.origin}/join/${shop.id}` : ''
-
-  function copyJoinLink() {
-    navigator.clipboard.writeText(joinUrl)
-    setCopiedLink(true)
-    setTimeout(() => setCopiedLink(false), 2500)
+  async function handleQueueAction(entryId, action) {
+    setActionBusy(true)
+    try {
+      await queueApi.ownerAction(entryId, action)
+      loadDashboard()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Action failed.')
+    } finally {
+      setActionBusy(false)
+    }
   }
 
-  const waitingCount = entries.filter((e) => e.status === 'waiting').length
-  const calledCount = entries.filter((e) => e.status === 'called').length
-  const inServiceCount = entries.filter((e) => e.status === 'in_service').length
+  async function handleAddWalkin(e) {
+    e.preventDefault()
+    if (!walkinForm.service_id || !shop) return
+    setActionBusy(true)
+    try {
+      await shopsApi.walkIn(shop.id, walkinForm)
+      setWalkinForm({ customer_name: '', customer_phone: '', service_id: '' })
+      loadDashboard()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to add walk-in customer.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="py-24 text-center space-y-4">
+        <span className="material-symbols-outlined text-4xl text-secondary animate-spin">progress_activity</span>
+        <p className="text-xs uppercase tracking-widest text-on-surface-variant font-semibold">
+          Accessing Atelier Suite...
+        </p>
+      </div>
+    )
+  }
+
+  if (!shop) {
+    return (
+      <div className="py-16 text-center space-y-4">
+        <p className="text-error font-display text-lg">No Atelier profile found for this proprietor account.</p>
+      </div>
+    )
+  }
 
   return (
-    <section className="mx-auto max-w-5xl space-y-7">
-      {/* Top Banner */}
-      <header className="overflow-hidden rounded-3xl bg-[#10201d] p-6 text-white shadow-xl shadow-emerald-950/20 sm:p-8">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-md bg-amber-400 px-2 py-0.5 text-xs font-black uppercase text-[#10201d]">
-                Owner Console
-              </span>
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${shop?.is_open ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
-                <span className="size-1.5 rounded-full bg-current" />
-                {shop?.is_open ? 'Shop Open' : 'Shop Closed'}
-              </span>
-            </div>
-            <h1 className="mt-2 text-3xl font-black tracking-tight">{shop?.name || 'Owner Dashboard'}</h1>
-            <p className="mt-1 text-xs text-slate-300 sm:text-sm">Manage queue flow, call next customers, and print counter QR</p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            {shop && (
-              <>
-                <button
-                  onClick={() => setShowQRModal(true)}
-                  className="rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/20"
-                >
-                  📱 Walk-In QR Code
-                </button>
-                <button
-                  onClick={toggleShop}
-                  className={`rounded-full px-5 py-2.5 text-xs font-bold transition ${
-                    shop.is_open
-                      ? 'bg-rose-600 text-white hover:bg-rose-700'
-                      : 'bg-emerald-500 text-white hover:bg-emerald-600'
-                  }`}
-                >
-                  {shop.is_open ? 'Override: Close Shop' : 'Open Shop'}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Live Counters */}
-        <div className="mt-6 grid grid-cols-3 gap-3 border-t border-white/10 pt-6">
-          <div className="rounded-2xl bg-white/[0.06] p-4 text-center">
-            <p className="text-2xl font-black text-white">{waitingCount}</p>
-            <p className="text-xs text-slate-300">Waiting in line</p>
-          </div>
-          <div className="rounded-2xl bg-white/[0.06] p-4 text-center">
-            <p className="text-2xl font-black text-amber-300">{calledCount}</p>
-            <p className="text-xs text-slate-300">Called (in grace)</p>
-          </div>
-          <div className="rounded-2xl bg-white/[0.06] p-4 text-center">
-            <p className="text-2xl font-black text-emerald-300">{inServiceCount}</p>
-            <p className="text-xs text-slate-300">In chair / service</p>
-          </div>
-        </div>
-      </header>
-
-      {/* Alerts */}
-      {error && <p className="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-900 border border-amber-200" role="alert">{error}</p>}
-      {success && <p className="rounded-xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-900 border border-emerald-200">{success}</p>}
-
-      {/* Quick Walk-In Enqueue Bar */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">Quick Walk-In Entry (Counter)</h2>
-        <form onSubmit={handleAddWalkIn} className="mt-3 flex flex-wrap items-center gap-3">
-          <input
-            type="text"
-            placeholder="Customer name (e.g. Ramesh)"
-            value={walkInName}
-            onChange={(e) => setWalkInName(e.target.value)}
-            className="flex-1 min-w-[200px] rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
-            required
-          />
-          {shopDetails?.services && (
-            <select
-              value={walkInServiceId}
-              onChange={(e) => setWalkInServiceId(e.target.value)}
-              className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+    <div className="space-y-10">
+      {/* Proprietor Status Banner */}
+      <section className="bg-surface-container-high border border-outline-variant/30 rounded-3xl p-6 sm:p-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <span
+              className={`text-[10px] uppercase font-bold tracking-widest px-3 py-1 rounded-full ${
+                shop.is_open ? 'bg-secondary text-on-secondary' : 'bg-primary text-on-primary'
+              }`}
             >
-              {shopDetails.services.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.minutes}m - ₹{s.price})
-                </option>
-              ))}
-            </select>
-          )}
-          <button
-            type="submit"
-            disabled={addingWalkIn || !walkInName.trim()}
-            className="rounded-xl bg-emerald-700 px-5 py-2 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:opacity-50"
-          >
-            {addingWalkIn ? 'Adding…' : '+ Add to Queue'}
-          </button>
-        </form>
-      </div>
-
-      {/* Active Queue List */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-black text-slate-950">Active Queue ({entries.length})</h2>
-          <span className="text-xs font-semibold text-slate-500">Auto-refreshes every 8 seconds</span>
+              {shop.is_open ? 'Accepting Clients' : 'Atelier Closed'}
+            </span>
+            <span className="text-xs text-on-surface-variant">Live Proprietor Portal</span>
+          </div>
+          <h1 className="font-display text-3xl font-bold text-on-surface">{shop.name}</h1>
+          <p className="text-xs text-on-surface-variant mt-1">{shop.address}</p>
         </div>
 
-        {entries.length === 0 && !error && (
-          <div className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center shadow-sm">
-            <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-100 text-xl">✂️</span>
-            <h3 className="mt-3 text-lg font-bold text-slate-900">Your queue is clear</h3>
-            <p className="mt-1 text-sm text-slate-500">No customers are currently waiting. Walk-ins can scan your QR code.</p>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleToggleStatus}
+            disabled={actionBusy}
+            className={`px-6 py-3 rounded-xl text-xs uppercase font-bold tracking-widest transition-all cursor-pointer shadow-md ${
+              shop.is_open
+                ? 'bg-error text-on-error hover:bg-error/90'
+                : 'bg-secondary text-on-secondary hover:bg-secondary/90'
+            }`}
+          >
+            {shop.is_open ? 'Pause / Close Queue' : 'Open for Clients'}
+          </button>
+        </div>
+      </section>
+
+      {/* Metrics Row */}
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-5 text-center">
+          <span className="text-[10px] uppercase tracking-wider text-on-surface-variant block mb-1">
+            Waiting in Queue
+          </span>
+          <span className="font-display text-3xl font-bold text-primary">
+            {queue.filter((q) => q.status === 'waiting').length}
+          </span>
+        </div>
+        <div className="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-5 text-center">
+          <span className="text-[10px] uppercase tracking-wider text-on-surface-variant block mb-1">
+            In Chair / Serving
+          </span>
+          <span className="font-display text-3xl font-bold text-secondary">
+            {queue.filter((q) => q.status === 'serving').length}
+          </span>
+        </div>
+        <div className="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-5 text-center">
+          <span className="text-[10px] uppercase tracking-wider text-on-surface-variant block mb-1">
+            Completed Today
+          </span>
+          <span className="font-display text-3xl font-bold text-primary">
+            {queue.filter((q) => q.status === 'completed').length}
+          </span>
+        </div>
+        <div className="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-5 text-center">
+          <span className="text-[10px] uppercase tracking-wider text-on-surface-variant block mb-1">
+            Max Capacity
+          </span>
+          <span className="font-display text-3xl font-bold text-on-surface">
+            {shop.max_queue_size ?? 15}
+          </span>
+        </div>
+      </section>
+
+      {/* Main Grid: Live Queue List + Add Walk-in */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Live Queue Cards */}
+        <div className="lg:col-span-8 space-y-4">
+          <div className="flex items-center justify-between border-b border-outline-variant/20 pb-3">
+            <h2 className="font-display text-xl font-bold text-on-surface">
+              Active Client Roster ({queue.filter(q => ['waiting', 'serving', 'called'].includes(q.status)).length})
+            </h2>
+            <button
+              onClick={loadDashboard}
+              className="text-xs uppercase font-bold tracking-wider text-secondary flex items-center gap-1 hover:underline cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-sm">refresh</span>
+              <span>Sync</span>
+            </button>
           </div>
-        )}
 
-        <ul className="space-y-3">
-          {entries.map((entry) => {
-            const isWaiting = entry.status === 'waiting'
-            const isCalled = entry.status === 'called'
-            const isInService = entry.status === 'in_service'
-
-            return (
-              <li
-                key={entry.id}
-                className={`flex flex-wrap items-center justify-between gap-4 rounded-2xl border bg-white p-5 shadow-sm transition duration-150 ${
-                  isCalled
-                    ? 'border-amber-300 ring-2 ring-amber-100'
-                    : isInService
-                    ? 'border-emerald-300 bg-emerald-50/20'
-                    : 'border-slate-200/80'
-                }`}
-              >
-                <div className="flex items-center gap-4">
+          {queue.filter(q => ['waiting', 'serving', 'called'].includes(q.status)).length === 0 ? (
+            <div className="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-8 text-center">
+              <span className="material-symbols-outlined text-3xl text-secondary mb-2">event_available</span>
+              <p className="font-display text-lg font-bold text-on-surface">Queue is currently clear</p>
+              <p className="text-xs text-on-surface-variant mt-1">
+                New online reservations or walk-ins will appear here in real time.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {queue
+                .filter(q => ['waiting', 'serving', 'called'].includes(q.status))
+                .map((entry) => (
                   <div
-                    className={`grid size-11 place-items-center rounded-2xl font-black text-sm ${
-                      isCalled
-                        ? 'bg-amber-400 text-[#10201d]'
-                        : isInService
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-slate-100 text-slate-700'
-                    }`}
+                    key={entry.id}
+                    className="p-5 rounded-2xl bg-surface-container-low border border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                   >
-                    #{entry.position || '★'}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-slate-950">{entry.customer_name}</h3>
-                      {entry.walk_in_name && (
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
-                          Walk-in
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-display text-lg font-bold text-on-surface">
+                          #{entry.position} {entry.customer_name}
                         </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      {entry.service_name} · Joined {new Date(entry.joined_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                    {isCalled && entry.called_at && (
-                      <div className="mt-2">
-                        <GracePeriodTimer calledAt={entry.called_at} />
+                        <span
+                          className={`text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full ${
+                            entry.status === 'serving'
+                              ? 'bg-secondary text-on-secondary'
+                              : entry.status === 'called'
+                              ? 'bg-primary text-secondary-fixed'
+                              : 'bg-surface-container text-on-surface-variant'
+                          }`}
+                        >
+                          {entry.status}
+                        </span>
                       </div>
-                    )}
+                      <p className="text-xs text-on-surface-variant">
+                        Service: <span className="font-semibold text-on-surface">{entry.service_name || entry.service?.name}</span> &bull;{' '}
+                        Phone: {entry.customer_phone}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {entry.status === 'waiting' && (
+                        <button
+                          onClick={() => handleQueueAction(entry.id, 'call')}
+                          disabled={actionBusy}
+                          className="px-3 py-1.5 rounded-lg bg-surface-container border border-outline-variant/40 text-xs font-bold uppercase tracking-wider text-on-surface hover:bg-surface-container-highest transition-colors cursor-pointer"
+                        >
+                          Notify / Call
+                        </button>
+                      )}
+                      {['waiting', 'called'].includes(entry.status) && (
+                        <button
+                          onClick={() => handleQueueAction(entry.id, 'serve')}
+                          disabled={actionBusy}
+                          className="px-3 py-1.5 rounded-lg bg-secondary text-on-secondary text-xs font-bold uppercase tracking-wider hover:bg-secondary/90 transition-colors cursor-pointer"
+                        >
+                          Seat in Chair
+                        </button>
+                      )}
+                      {entry.status === 'serving' && (
+                        <button
+                          onClick={() => handleQueueAction(entry.id, 'complete')}
+                          disabled={actionBusy}
+                          className="px-3 py-1.5 rounded-lg bg-primary text-secondary-fixed text-xs font-bold uppercase tracking-wider hover:bg-primary-container transition-colors cursor-pointer"
+                        >
+                          Complete Session
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleQueueAction(entry.id, 'cancel')}
+                        disabled={actionBusy}
+                        className="px-2.5 py-1.5 rounded-lg text-error hover:bg-error-container/20 text-xs font-bold cursor-pointer"
+                        title="Cancel entry"
+                      >
+                        <span className="material-symbols-outlined text-base">close</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                {/* Owner Actions */}
-                <div className="flex items-center gap-2">
-                  {isWaiting && (
-                    <button
-                      onClick={() => act(entry.id, 'call')}
-                      disabled={entry.position !== 1}
-                      className="rounded-xl bg-amber-400 px-4 py-2 text-xs font-bold text-[#10201d] transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {entry.position === 1 ? '📢 Call Next' : `Wait (#${entry.position})`}
-                    </button>
-                  )}
-
-                  {isCalled && (
-                    <>
-                      <button
-                        onClick={() => act(entry.id, 'no-show')}
-                        className="rounded-xl border border-rose-300 px-3.5 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
-                      >
-                        Mark No-Show
-                      </button>
-                      <button
-                        onClick={() => act(entry.id, 'start')}
-                        className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-700"
-                      >
-                        💺 Start Service
-                      </button>
-                    </>
-                  )}
-
-                  {isInService && (
-                    <button
-                      onClick={() => act(entry.id, 'done')}
-                      className="rounded-xl bg-blue-700 px-5 py-2 text-xs font-bold text-white transition hover:bg-blue-800"
-                    >
-                      ✓ Complete Service
-                    </button>
-                  )}
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      </div>
-
-      {/* QR Code Modal for Counter Printing */}
-      {showQRModal && shop && (
-        <div className="fixed inset-0 z-[1200] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl bg-white p-7 text-center shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-xs font-black uppercase tracking-wider text-slate-500">Counter Display</span>
-              <button onClick={() => setShowQRModal(false)} className="text-slate-400 hover:text-slate-700">✕</button>
+                ))}
             </div>
-            <h3 className="text-xl font-black text-slate-950">{shop.name}</h3>
-            <p className="mt-1 text-xs text-slate-500">Scan to join the live queue instantly</p>
+          )}
+        </div>
 
-            <div className="my-5 flex justify-center">
-              <div className="rounded-2xl border-4 border-slate-900 p-2 shadow-inner">
-                <img
-                  src={generateSimpleQRDataURL(joinUrl)}
-                  alt="Shop QR Code"
-                  className="size-48 rounded-lg"
-                />
-              </div>
-            </div>
-
-            <p className="text-xs font-mono text-slate-600 truncate bg-slate-100 p-2 rounded-lg">
-              {joinUrl}
+        {/* Walk-in Entry Form */}
+        <div className="lg:col-span-4">
+          <div className="bg-surface-container-low border border-outline-variant/30 rounded-3xl p-6 shadow-sm space-y-4">
+            <h3 className="font-display text-lg font-bold text-on-surface">Add Walk-in Client</h3>
+            <p className="text-xs text-on-surface-variant">
+              Quickly register a guest who walked into the salon atelier.
             </p>
 
-            <div className="mt-5 flex gap-2">
+            <form onSubmit={handleAddWalkin} className="space-y-3">
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider font-semibold text-on-surface-variant mb-1">
+                  Client Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Guest Name"
+                  value={walkinForm.customer_name}
+                  onChange={(e) => setWalkinForm({ ...walkinForm, customer_name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-surface-container border border-outline-variant/40 text-xs text-on-surface focus:border-secondary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider font-semibold text-on-surface-variant mb-1">
+                  Contact Phone
+                </label>
+                <input
+                  type="tel"
+                  placeholder="+91..."
+                  value={walkinForm.customer_phone}
+                  onChange={(e) => setWalkinForm({ ...walkinForm, customer_phone: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-surface-container border border-outline-variant/40 text-xs text-on-surface focus:border-secondary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider font-semibold text-on-surface-variant mb-1">
+                  Select Service
+                </label>
+                <select
+                  required
+                  value={walkinForm.service_id}
+                  onChange={(e) => setWalkinForm({ ...walkinForm, service_id: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-surface-container border border-outline-variant/40 text-xs text-on-surface focus:border-secondary focus:outline-none"
+                >
+                  <option value="">Select treatment...</option>
+                  {shop.services?.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} (₹{s.price})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <button
-                onClick={copyJoinLink}
-                className="flex-1 rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800"
+                type="submit"
+                disabled={actionBusy}
+                className="w-full py-3 mt-2 rounded-xl bg-primary text-secondary-fixed text-xs uppercase font-bold tracking-widest hover:bg-primary-container transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
-                {copiedLink ? 'Copied!' : 'Copy Link'}
+                <span className="material-symbols-outlined text-sm">person_add</span>
+                <span>Enroll in Queue</span>
               </button>
-              <button
-                onClick={() => window.print()}
-                className="rounded-xl border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
-              >
-                Print Sign
-              </button>
-            </div>
+            </form>
           </div>
         </div>
-      )}
-    </section>
+      </section>
+    </div>
   )
 }

@@ -1,55 +1,49 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-
+import { useState, useRef, useEffect } from 'react'
 import { assistantApi } from '../api/api.js'
-
-const QUICK_PROMPTS = [
-  '⚡ Fastest haircut near me',
-  '💰 Sasta haircut under ₹200',
-  '🧔 Beard trim under ₹150',
-  '🕒 Shortest wait right now',
-]
 
 export default function ChatWidget() {
   const [open, setOpen] = useState(false)
-  const [message, setMessage] = useState('')
   const [messages, setMessages] = useState([
     {
-      role: 'assistant',
-      text: 'Namaste! I can find barbers around Jaipur by wait time, price, or service. Type in English or Hinglish (e.g., "sasta haircut under 250").',
-      shops: [],
+      sender: 'bot',
+      text: 'Greetings. I am your Barber Pulse concierge. How may I assist your grooming schedule today?',
     },
   ])
-  const [location, setLocation] = useState(null)
+  const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const messagesEndRef = useRef(null)
 
-  async function handleSend(queryText) {
-    const textToSend = (queryText || message).trim()
-    if (!textToSend || busy) return
+  useEffect(() => {
+    if (open) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages, open])
 
-    const userEntry = { role: 'user', text: textToSend }
-    setMessages((prev) => [...prev, userEntry])
-    setMessage('')
+  async function handleSend(e) {
+    e.preventDefault()
+    if (!input.trim() || busy) return
+
+    const userMsg = input.trim()
+    setInput('')
+    setMessages((prev) => [...prev, { sender: 'user', text: userMsg }])
     setBusy(true)
 
     try {
-      const { data } = await assistantApi.chat(textToSend, location || {})
+      const { data } = await assistantApi.chat(userMsg)
       setMessages((prev) => [
         ...prev,
         {
-          role: 'assistant',
-          text: data.message || 'Here are the matching shops:',
+          sender: 'bot',
+          text: data.reply || data.response || 'I have noted your request.',
           shops: data.shops || [],
-          filters: data.filters || {},
         },
       ])
-    } catch (error) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
-          role: 'assistant',
-          text: error.response?.data?.detail || 'Could not find matching shops. Please try again.',
-          shops: [],
+          sender: 'bot',
+          text: 'Pardon me, our concierge service is momentarily indisposed. Please explore ateliers directly.',
         },
       ])
     } finally {
@@ -57,200 +51,112 @@ export default function ChatWidget() {
     }
   }
 
-  function useLocation() {
-    if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser.')
-      return
-    }
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setLocation({ lat: coords.latitude, lon: coords.longitude })
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            text: '📍 Location updated! Upcoming searches will rank nearest shops first.',
-            shops: [],
-          },
-        ])
-      },
-      () => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            text: 'Location permission was denied. You can still ask for the fastest or cheapest shop.',
-            shops: [],
-          },
-        ])
-      },
-    )
-  }
-
   return (
-    <aside aria-label="QueueNear Assistant" className="fixed bottom-5 right-5 z-[1000]">
+    <div className="fixed bottom-6 right-6 z-50">
+      {/* Floating Toggle Button */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="group flex items-center gap-2.5 rounded-full bg-[#10201d] px-5 py-3.5 text-sm font-bold text-white shadow-2xl shadow-emerald-950/40 ring-2 ring-amber-400/80 transition-all duration-200 hover:-translate-y-1 hover:bg-[#152a26] hover:shadow-emerald-900/50"
-          aria-label="Open QueueNear Smart Assistant"
+          className="w-14 h-14 rounded-full bg-primary text-secondary-fixed shadow-2xl flex items-center justify-center hover:scale-105 transition-transform duration-300 border border-secondary/40 cursor-pointer"
+          aria-label="Open Concierge"
         >
-          <span className="relative flex size-3">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
-          </span>
-          <span className="text-amber-400">Ask Assistant</span>
-          <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] text-slate-300">AI</span>
+          <span className="material-symbols-outlined text-2xl">chat_bubble</span>
         </button>
       )}
 
+      {/* Concierge Window */}
       {open && (
-        <div className="flex h-[32rem] w-[min(26rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/25 ring-1 ring-black/5 animate-in fade-in slide-in-from-bottom-4">
+        <div className="w-[360px] sm:w-[400px] h-[520px] rounded-3xl bg-surface-container-low border border-outline-variant/40 shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 bg-[#10201d] px-5 py-4 text-white">
-            <div className="flex items-center gap-2.5">
-              <span className="grid size-8 place-items-center rounded-xl bg-amber-400 text-xs font-black text-[#10201d]">
-                QN
-              </span>
+          <div className="bg-primary text-on-primary px-5 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center">
+                <span className="material-symbols-outlined text-base">support_agent</span>
+              </div>
               <div>
-                <h3 className="text-sm font-bold leading-tight text-white">QueueNear Assistant</h3>
-                <p className="text-[11px] text-emerald-300">Natural search & Hinglish parser</p>
+                <h3 className="font-display text-sm font-bold tracking-wide">
+                  Atelier Concierge
+                </h3>
+                <p className="text-[10px] text-secondary-fixed uppercase tracking-widest">
+                  Live Assistant
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={useLocation}
-                title={location ? 'Location active' : 'Enable device location'}
-                className={`rounded-lg p-1.5 text-xs transition ${location ? 'bg-emerald-500/20 text-emerald-300' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}
-              >
-                📍
-              </button>
-              <button
-                onClick={() => setOpen(false)}
-                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
-                aria-label="Close assistant"
-              >
-                ✕
-              </button>
-            </div>
+            <button
+              onClick={() => setOpen(false)}
+              className="text-on-primary/70 hover:text-on-primary cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
           </div>
 
-          {/* Messages Area */}
-          <div className="flex-1 space-y-4 overflow-y-auto p-4 text-sm">
+          {/* Messages Body */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
             {messages.map((m, idx) => (
               <div
                 key={idx}
-                className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}
+                className={`flex flex-col ${
+                  m.sender === 'user' ? 'items-end' : 'items-start'
+                }`}
               >
                 <div
-                  className={`max-w-[88%] rounded-2xl px-4 py-2.5 ${
-                    m.role === 'user'
-                      ? 'bg-emerald-700 text-white rounded-br-none'
-                      : 'bg-slate-100 text-slate-800 rounded-bl-none'
+                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 leading-relaxed ${
+                    m.sender === 'user'
+                      ? 'bg-primary text-secondary-fixed rounded-tr-none'
+                      : 'bg-surface-container border border-outline-variant/30 text-on-surface rounded-tl-none'
                   }`}
                 >
-                  <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
+                  {m.text}
                 </div>
 
-                {/* Returned Shop Cards */}
-                {m.shops && m.shops.length > 0 && (
-                  <div className="mt-2.5 w-full space-y-2">
-                    {m.shops.slice(0, 4).map((shop) => (
-                      <div
-                        key={shop.id}
-                        className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-[#fbfbfa] p-3 transition hover:border-emerald-300 hover:bg-white"
+                {/* Optional mini cards if concierge returns shops */}
+                {m.shops?.length > 0 && (
+                  <div className="mt-2 space-y-1.5 w-full">
+                    {m.shops.map((s) => (
+                      <a
+                        key={s.id}
+                        href={`/shops/${s.id}`}
+                        className="block p-2 rounded-xl bg-surface-container border border-outline-variant/40 text-on-surface hover:border-secondary transition-colors"
                       >
-                        <div className="min-w-0 flex-1 pr-2">
-                          <Link
-                            to={`/shops/${shop.id}`}
-                            className="block truncate font-bold text-slate-900 hover:text-emerald-800"
-                            onClick={() => setOpen(false)}
-                          >
-                            {shop.name}
-                          </Link>
-                          <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
-                            <span>⏱️ {shop.estimated_wait_min}m wait</span>
-                            <span>•</span>
-                            <span>👥 {shop.queue_length} ahead</span>
-                            {shop.distance_km != null && (
-                              <>
-                                <span>•</span>
-                                <span>{Number(shop.distance_km).toFixed(1)}km</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <Link
-                          to={`/shops/${shop.id}`}
-                          onClick={() => setOpen(false)}
-                          className="shrink-0 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-800"
-                        >
-                          Join
-                        </Link>
-                      </div>
+                        <p className="font-bold text-[11px]">{s.name}</p>
+                        <p className="text-[10px] text-on-surface-variant truncate">{s.address}</p>
+                      </a>
                     ))}
-                    {m.shops.length > 4 && (
-                      <p className="text-center text-xs text-slate-500">
-                        +{m.shops.length - 4} more shops available
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
             ))}
-
             {busy && (
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <span className="size-2 animate-bounce rounded-full bg-emerald-600" />
-                <span className="size-2 animate-bounce rounded-full bg-emerald-600 [animation-delay:0.2s]" />
-                <span className="size-2 animate-bounce rounded-full bg-emerald-600 [animation-delay:0.4s]" />
-                <span>Checking live queue and prices…</span>
+              <div className="flex items-center gap-2 text-on-surface-variant text-[11px]">
+                <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                <span>Concierge is deliberating...</span>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick prompt chips */}
-          <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-2">
-            <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-              {QUICK_PROMPTS.map((prompt, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleSend(prompt)}
-                  disabled={busy}
-                  className="whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-800"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Input Box */}
+          {/* Footer Input */}
           <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              handleSend()
-            }}
-            className="flex items-center gap-2 border-t border-slate-100 bg-white p-3"
+            onSubmit={handleSend}
+            className="p-3 bg-surface-container border-t border-outline-variant/20 flex items-center gap-2"
           >
             <input
               type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="e.g. beard trim under 200..."
-              className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-100"
-              maxLength={400}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Inquire about salons or wait times..."
+              className="flex-1 bg-surface-container-lowest px-3 py-2 rounded-xl border border-outline-variant/30 text-xs text-on-surface focus:outline-none focus:border-secondary"
             />
             <button
               type="submit"
-              disabled={!message.trim() || busy}
-              className="rounded-xl bg-amber-400 px-4 py-2 text-xs font-bold text-[#10201d] transition hover:bg-amber-300 disabled:opacity-50"
+              disabled={busy || !input.trim()}
+              className="p-2 rounded-xl bg-primary text-secondary-fixed disabled:opacity-50 hover:bg-primary-container transition-colors cursor-pointer"
             >
-              Send
+              <span className="material-symbols-outlined text-base">send</span>
             </button>
           </form>
         </div>
       )}
-    </aside>
+    </div>
   )
 }

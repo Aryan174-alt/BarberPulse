@@ -1,1 +1,75 @@
 @import "tailwindcss";
+
+@theme {
+  /* Stitch Luxury Color Palette */
+  --color-surface-container: #f1ede5;
+  --color-on-secondary-fixed: #271900;
+  --color-on-error: #ffffff;
+  --color-on-primary: #ffffff;
+  --color-inverse-surface: #31302b;
+  --color-tertiary-fixed-dim: #cfc5b8;
+  --color-on-secondary: #ffffff;
+  --color-inverse-on-surface: #f4f0e8;
+  --color-primary-fixed-dim: #d1c4be;
+  --color-on-surface-variant: #4d4540;
+  --color-on-primary-container: #938883;
+  --color-secondary-fixed: #ffdea8;
+  --color-on-tertiary-fixed: #1f1b12;
+  --color-on-primary-fixed-variant: #4e4540;
+  --color-on-background: #1c1c17;
+  --color-tertiary: #110e06;
+  --color-surface-container-low: #f7f3eb;
+  --color-on-tertiary-fixed-variant: #4c463c;
+  --color-surface-container-highest: #e6e2da;
+  --color-inverse-primary: #d1c4be;
+  --color-primary-container: #1d1713;
+  --color-on-surface: #1c1c17;
+  --color-outline: #7f7570;
+  --color-on-secondary-fixed-variant: #59431a;
+  --color-error-container: #ffdad6;
+  --color-surface-container-high: #ece8e0;
+  --color-on-primary-fixed: #211a16;
+  --color-primary-fixed: #ede0d9;
+  --color-on-secondary-container: #775f33;
+  --color-background: #fdf9f1;
+  --color-outline-variant: #d1c4be;
+  --color-tertiary-fixed: #ebe1d3;
+  --color-surface-dim: #dddad2;
+  --color-on-tertiary: #ffffff;
+  --color-primary: #120d09;
+  --color-surface-container-lowest: #ffffff;
+  --color-on-tertiary-container: #928a7e;
+  --color-surface: #fdf9f1;
+  --color-on-error-container: #93000a;
+  --color-surface-bright: #fdf9f1;
+  --color-secondary-fixed-dim: #e2c28d;
+  --color-surface-tint: #665c57;
+  --color-surface-variant: #e6e2da;
+  --color-secondary-container: #fcdba4;
+  --color-tertiary-container: #28231a;
+  --color-secondary: #735b2f;
+  --color-error: #ba1a1a;
+
+  /* Font families */
+  --font-display: "Playfair Display", serif;
+  --font-headline: "Playfair Display", serif;
+  --font-body: "Plus Jakarta Sans", sans-serif;
+  --font-title: "Plus Jakarta Sans", sans-serif;
+  --font-label: "Plus Jakarta Sans", sans-serif;
+}
+
+/* Base reset for Stitch UI */
+@layer base {
+  body {
+    overscript-behavior: none;
+    font-family: "Plus Jakarta Sans", sans-serif;
+    color: #1c1c17;
+    background: #fdf9f1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Custom scrollbar hide utility */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

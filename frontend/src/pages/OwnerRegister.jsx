@@ -1,82 +1,84 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-
 import { authApi, saveTokens } from '../api/api.js'
 import LocationPicker from '../components/LocationPicker.jsx'
 
-const initialForm = {
-  owner_name: '',
-  email: '',
-  phone: '',
-  password: '',
-  shop_name: '',
-  address: '',
-  lat: '26.9124',
-  lon: '75.7873',
-  opens_at: '09:00',
-  closes_at: '21:00',
-  break_start: '',
-  break_end: '',
-}
-
 export default function OwnerRegister() {
   const navigate = useNavigate()
-  const [form, setForm] = useState(initialForm)
-  const [services, setServices] = useState([{ name: 'Haircut', minutes: '30', price: '' }])
-  const [photo, setPhoto] = useState(null)
+  const [form, setForm] = useState({
+    username: '',
+    password: '',
+    shop_name: '',
+    address: '',
+    phone: '',
+    latitude: 26.9124,
+    longitude: 75.7873,
+    avg_service_time_min: 25,
+    max_queue_size: 15,
+  })
+
+  const [services, setServices] = useState([
+    { name: 'Signature Haircut', price: '450', duration_min: 30 },
+  ])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  function update(event) {
-    setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
+  function updateService(idx, key, val) {
+    const next = [...services]
+    next[idx][key] = val
+    setServices(next)
   }
 
-  function updateService(index, event) {
-    const updated = [...services]
-    updated[index] = { ...updated[index], [event.target.name]: event.target.value }
-    setServices(updated)
+  function addService() {
+    setServices([...services, { name: '', price: '', duration_min: 30 }])
   }
 
-  function setLocation(location) {
-    setForm((current) => ({
-      ...current,
-      lat: location.lat.toFixed(6),
-      lon: location.lon.toFixed(6),
-    }))
-  }
-
-  function useMyLocation() {
-    if (!navigator.geolocation) {
-      setError('Location is not available in this browser. You can click the map or enter coordinates.')
-      return
+  function removeService(idx) {
+    if (services.length > 1) {
+      setServices(services.filter((_, i) => i !== idx))
     }
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => setLocation({ lat: coords.latitude, lon: coords.longitude }),
-      () => setError('Location permission was denied. Click the map or enter coordinates instead.'),
-      { enableHighAccuracy: true, timeout: 10000 },
-    )
   }
 
-  async function submit(event) {
-    event.preventDefault()
+  async function handleSubmit(e) {
+    e.preventDefault()
     setError('')
     setBusy(true)
-    const payload = new FormData()
-    Object.entries(form).forEach(([key, value]) => {
-      if (value !== '') payload.append(key, value)
-    })
-    payload.append('services', JSON.stringify(services))
-    if (photo) payload.append('photo', photo)
+
     try {
-      const { data } = await authApi.registerOwnerShop(payload)
-      saveTokens(data, 'owner')
-      navigate('/owner')
-    } catch (requestError) {
-      const details = requestError.response?.data
+      const payload = {
+        username: form.username,
+        password: form.password,
+        shop_name: form.shop_name,
+        address: form.address,
+        phone: form.phone,
+        latitude: form.latitude,
+        longitude: form.longitude,
+        avg_service_time_min: parseInt(form.avg_service_time_min, 10),
+        max_queue_size: parseInt(form.max_queue_size, 10),
+        services: services
+          .filter((s) => s.name.trim() && s.price)
+          .map((s) => ({
+            name: s.name,
+            price: parseFloat(s.price),
+            duration_min: parseInt(s.duration_min, 10) || 30,
+          })),
+      }
+
+      const res = await authApi.registerOwnerShop(payload)
+      if (res.data?.access) {
+        saveTokens(res.data, 'owner')
+        navigate('/owner')
+      } else {
+        // Fallback login
+        const loginRes = await authApi.login({ username: form.username, password: form.password })
+        saveTokens(loginRes.data, loginRes.data.role)
+        navigate('/owner')
+      }
+    } catch (err) {
       setError(
-        typeof details === 'object'
-          ? Object.entries(details).map(([field, messages]) => `${field}: ${[].concat(messages).join(', ')}`).join(' · ')
-          : details || 'Could not create the owner account.',
+        err.response?.data?.detail ||
+          JSON.stringify(err.response?.data) ||
+          'Failed to complete registration. Please review inputs.'
       )
     } finally {
       setBusy(false)
@@ -84,102 +86,250 @@ export default function OwnerRegister() {
   }
 
   return (
-    <section className="mx-auto max-w-3xl rounded-2xl bg-white p-6 shadow-sm sm:p-8">
-      <Link to="/login" className="text-sm font-medium text-blue-700">← Sign in</Link>
-      <h1 className="mt-4 text-3xl font-bold text-slate-950">Register your barber shop</h1>
-      <p className="mt-2 text-slate-600">Create an owner account and add your shop details so customers can find you.</p>
-
-      <form className="mt-7 space-y-8" onSubmit={submit}>
-        <fieldset className="grid gap-4 sm:grid-cols-2">
-          <legend className="mb-3 text-lg font-semibold text-slate-900">Owner account</legend>
-          <label className="text-sm font-medium text-slate-700">Owner name
-            <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="owner_name" value={form.owner_name} onChange={update} autoComplete="name" required />
-          </label>
-          <label className="text-sm font-medium text-slate-700">Email
-            <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="email" type="email" value={form.email} onChange={update} autoComplete="email" required />
-          </label>
-          <label className="text-sm font-medium text-slate-700">Phone
-            <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="phone" type="tel" value={form.phone} onChange={update} autoComplete="tel" required />
-          </label>
-          <label className="text-sm font-medium text-slate-700">Password
-            <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="password" type="password" minLength={8} value={form.password} onChange={update} autoComplete="new-password" required />
-          </label>
-        </fieldset>
-
-        <fieldset className="grid gap-4 sm:grid-cols-2">
-          <legend className="mb-3 text-lg font-semibold text-slate-900">Shop details</legend>
-          <label className="text-sm font-medium text-slate-700 sm:col-span-2">Shop name
-            <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="shop_name" value={form.shop_name} onChange={update} required />
-          </label>
-          <label className="text-sm font-medium text-slate-700 sm:col-span-2">Street address and area
-            <textarea className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="address" rows="2" value={form.address} onChange={update} required />
-          </label>
-          <label className="text-sm font-medium text-slate-700">Opens at
-            <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="opens_at" type="time" value={form.opens_at} onChange={update} required />
-          </label>
-          <label className="text-sm font-medium text-slate-700">Closes at
-            <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="closes_at" type="time" value={form.closes_at} onChange={update} required />
-          </label>
-          <label className="text-sm font-medium text-slate-700">Break starts (optional)
-            <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="break_start" type="time" value={form.break_start} onChange={update} />
-          </label>
-          <label className="text-sm font-medium text-slate-700">Break ends (optional)
-            <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="break_end" type="time" value={form.break_end} onChange={update} />
-          </label>
-        </fieldset>
-
-        <section>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Services and prices</h2>
-              <p className="text-sm text-slate-600">Customers see these choices before joining your queue.</p>
-            </div>
-            <button type="button" className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700" disabled={services.length >= 20} onClick={() => setServices([...services, { name: '', minutes: '30', price: '' }])}>
-              Add service
-            </button>
+    <div className="max-w-3xl mx-auto my-12">
+      <div className="bg-surface-container-low border border-outline-variant/30 rounded-3xl p-8 sm:p-12 shadow-lg">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-secondary/10 text-secondary mb-3">
+            <span className="material-symbols-outlined text-2xl">storefront</span>
           </div>
-          <div className="mt-3 space-y-3">
-            {services.map((service, index) => (
-              <div className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-[1fr_8rem_8rem_auto]" key={index}>
-                <input aria-label="Service name" className="rounded-lg border border-slate-300 px-3 py-2" name="name" placeholder="Service name" value={service.name} onChange={(event) => updateService(index, event)} required />
-                <input aria-label="Duration in minutes" className="rounded-lg border border-slate-300 px-3 py-2" name="minutes" type="number" min="1" max="600" placeholder="Minutes" value={service.minutes} onChange={(event) => updateService(index, event)} required />
-                <input aria-label="Price in rupees" className="rounded-lg border border-slate-300 px-3 py-2" name="price" type="number" min="0" step="0.01" placeholder="Price ₹" value={service.price} onChange={(event) => updateService(index, event)} required />
-                {services.length > 1 && <button type="button" className="px-2 text-sm text-red-700" aria-label="Remove service" onClick={() => setServices(services.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>}
+          <h1 className="font-display text-3xl font-bold text-on-surface">
+            Register Your Salon Atelier
+          </h1>
+          <p className="text-xs uppercase tracking-widest text-on-surface-variant mt-2">
+            Showcase your craftsmanship and modernize queue reservations
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-error-container/40 border border-error/20 text-error text-xs flex items-center gap-2">
+            <span className="material-symbols-outlined text-base shrink-0">error</span>
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Section: Account */}
+          <div className="space-y-4">
+            <h2 className="font-display text-lg font-bold text-on-surface border-b border-outline-variant/20 pb-2">
+              1. Proprietor Account
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-semibold text-on-surface-variant mb-2">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={form.username}
+                  onChange={(e) => setForm({ ...form, username: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-surface-container border border-outline-variant/40 text-on-surface text-sm focus:border-secondary focus:outline-none"
+                  placeholder="atelier_admin"
+                />
+              </div>
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-semibold text-on-surface-variant mb-2">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-surface-container border border-outline-variant/40 text-on-surface text-sm focus:border-secondary focus:outline-none"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Shop Details */}
+          <div className="space-y-4">
+            <h2 className="font-display text-lg font-bold text-on-surface border-b border-outline-variant/20 pb-2">
+              2. Atelier Information
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-xs uppercase tracking-wider font-semibold text-on-surface-variant mb-2">
+                  Salon / Atelier Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={form.shop_name}
+                  onChange={(e) => setForm({ ...form, shop_name: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-surface-container border border-outline-variant/40 text-on-surface text-sm focus:border-secondary focus:outline-none"
+                  placeholder="e.g. The Imperial Barber Club"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs uppercase tracking-wider font-semibold text-on-surface-variant mb-2">
+                  Full Street Address
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-surface-container border border-outline-variant/40 text-on-surface text-sm focus:border-secondary focus:outline-none"
+                  placeholder="Plot 42, Heritage Boulevard, C-Scheme"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs uppercase tracking-wider font-semibold text-on-surface-variant mb-2">
+                  Direct Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-surface-container border border-outline-variant/40 text-on-surface text-sm focus:border-secondary focus:outline-none"
+                  placeholder="+91 98765 43210"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Operational Settings */}
+          <div className="space-y-4">
+            <h2 className="font-display text-lg font-bold text-on-surface border-b border-outline-variant/20 pb-2">
+              3. Queue &amp; Service Defaults
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-semibold text-on-surface-variant mb-2">
+                  Average Service Duration (Mins)
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  max="180"
+                  value={form.avg_service_time_min}
+                  onChange={(e) => setForm({ ...form, avg_service_time_min: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-surface-container border border-outline-variant/40 text-on-surface text-sm focus:border-secondary focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-semibold text-on-surface-variant mb-2">
+                  Maximum Queue Capacity
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={form.max_queue_size}
+                  onChange={(e) => setForm({ ...form, max_queue_size: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-surface-container border border-outline-variant/40 text-on-surface text-sm focus:border-secondary focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Location Coordinates */}
+          <div className="space-y-4">
+            <h2 className="font-display text-lg font-bold text-on-surface border-b border-outline-variant/20 pb-2">
+              4. Geographic Coordinates
+            </h2>
+            <LocationPicker
+              lat={form.latitude}
+              lng={form.longitude}
+              onChange={(coords) => setForm({ ...form, latitude: coords.lat, longitude: coords.lng })}
+            />
+          </div>
+
+          {/* Section: Menu & Services */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">
+              <h2 className="font-display text-lg font-bold text-on-surface">
+                5. Curated Services Menu
+              </h2>
+              <button
+                type="button"
+                onClick={addService}
+                className="text-xs uppercase font-bold tracking-wider text-secondary flex items-center gap-1 hover:underline cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-sm">add</span>
+                <span>Add Service</span>
+              </button>
+            </div>
+            {services.map((s, idx) => (
+              <div
+                key={idx}
+                className="grid grid-cols-1 sm:grid-cols-12 gap-3 p-4 bg-surface-container rounded-2xl items-center"
+              >
+                <div className="sm:col-span-5">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Service Name (e.g. Royal Beard Trim)"
+                    value={s.name}
+                    onChange={(e) => updateService(idx, 'name', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-surface-container-low border border-outline-variant/30 text-xs text-on-surface"
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <input
+                    type="number"
+                    required
+                    placeholder="Price (₹)"
+                    value={s.price}
+                    onChange={(e) => updateService(idx, 'price', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-surface-container-low border border-outline-variant/30 text-xs text-on-surface"
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <input
+                    type="number"
+                    required
+                    placeholder="Mins"
+                    value={s.duration_min}
+                    onChange={(e) => updateService(idx, 'duration_min', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-surface-container-low border border-outline-variant/30 text-xs text-on-surface"
+                  />
+                </div>
+                <div className="sm:col-span-1 text-center">
+                  {services.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeService(idx)}
+                      className="text-error hover:text-error/80 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-base">delete</span>
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
-        </section>
 
-        <section>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Shop location</h2>
-              <p className="text-sm text-slate-600">Click the map, use your device location, or adjust the coordinates.</p>
-            </div>
-            <button type="button" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium" onClick={useMyLocation}>Use my location</button>
-          </div>
-          <div className="mt-3 overflow-hidden rounded-lg">
-            <LocationPicker location={{ lat: Number(form.lat), lon: Number(form.lon) }} onSelect={setLocation} />
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm font-medium text-slate-700">Latitude
-              <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="lat" type="number" min="-90" max="90" step="0.000001" value={form.lat} onChange={update} required />
-            </label>
-            <label className="text-sm font-medium text-slate-700">Longitude
-              <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" name="lon" type="number" min="-180" max="180" step="0.000001" value={form.lon} onChange={update} required />
-            </label>
-          </div>
-        </section>
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full py-4 rounded-xl bg-primary text-secondary-fixed text-xs uppercase font-bold tracking-widest hover:bg-primary-container transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-lg"
+          >
+            {busy ? (
+              <>
+                <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+                <span>Configuring Atelier Profile...</span>
+              </>
+            ) : (
+              <>
+                <span>Complete Atelier Registration</span>
+                <span className="material-symbols-outlined text-sm">verified</span>
+              </>
+            )}
+          </button>
+        </form>
 
-        <label className="block text-sm font-medium text-slate-700">Shop photo (JPG, PNG, or WebP; up to 5 MB)
-          <input className="mt-2 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:font-semibold file:text-blue-700" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPhoto(event.target.files?.[0] || null)} />
-        </label>
-
-        {error && <p className="break-words rounded-lg bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
-        <button className="w-full rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white disabled:opacity-50" disabled={busy}>
-          {busy ? 'Creating shop…' : 'Create owner account and publish shop'}
-        </button>
-      </form>
-    </section>
+        <div className="mt-8 pt-6 border-t border-outline-variant/20 text-center">
+          <p className="text-xs text-on-surface-variant">
+            Already registered as an atelier owner?{' '}
+            <Link to="/login" className="font-semibold text-secondary hover:underline">
+              Sign in here
+            </Link>
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
